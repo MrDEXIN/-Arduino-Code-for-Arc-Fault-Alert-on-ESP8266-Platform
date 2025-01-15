@@ -1,0 +1,151 @@
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>  
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
+
+const char* ssid = "";//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+const char* password = "";//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+const char* mqtt_server = "";//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+#define DHTPIN 0
+#define DHTTYPE    DHT11     // DHT 11
+#define LightPin A0
+#define COMMONPIN 15
+#define ONPIN 16
+
+
+DHT_Unified dht(DHTPIN, DHTTYPE);
+
+uint32_t delayMS;
+
+const int buttonPin = 12;
+const int outputPin = 14;
+
+
+int threshold = 100;
+bool buttonState;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+char msg_t[50];
+char msg_h[50];
+char msg[50];
+int value = 0;
+String msgfromchar;   //////string для подачи из топика в json
+String topicstr;
+char msg_pos[50];
+char bufferq1[256];
+char bufferq2[256];
+double lightLevel = 0;
+bool one_time=true;
+
+void setup_wifi() {
+
+  delay(10);
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  randomSeed(micros());
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+
+
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  
+}
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Create a random client ID
+    String clientId = "ESP8266Client-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("outTopic", "hello world");
+      // ... and resubscribe
+      client.subscribe("inTopic");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+void setup() {
+  analogWriteFreq(10000);
+  analogWriteRange(1023);
+  Serial.begin(9600);
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  reconnect();
+  client.setCallback(callback);
+    pinMode(buttonPin, INPUT);
+    pinMode(outputPin, OUTPUT);
+    digitalWrite(outputPin, LOW);
+    Serial.begin(115200);
+    Serial.begin(115200);
+  // Initialize device.
+  dht.begin();
+  Serial.println(F("DHTxx Unified Sensor Example"));
+  // Print temperature sensor details.
+  sensor_t sensor;
+  delayMS = sensor.min_delay / 1000;
+  pinMode(COMMONPIN, OUTPUT);
+  pinMode(ONPIN, INPUT);
+}
+
+
+void loop() {
+  digitalWrite(COMMONPIN, HIGH);
+    lightLevel = 400 - analogRead(LightPin);
+    buttonState = digitalRead(buttonPin);
+    if (buttonState == LOW) {
+        if (lightLevel > threshold) {
+            digitalWrite(outputPin, HIGH);
+            client.publish("command_arc/", "1");
+        } else {
+            digitalWrite(outputPin, LOW);
+            client.publish("command_arc/", "2");
+        }
+    } else {
+        digitalWrite(outputPin, LOW);
+        client.publish("command_arc/", "0");
+    }
+    Serial.print("Light Level: ");
+    Serial.print(lightLevel);
+    Serial.print(" | Button State: ");
+    Serial.println(buttonState == LOW ? "Pressed" : "Released");
+    delay(100);
+
+}
+
+
