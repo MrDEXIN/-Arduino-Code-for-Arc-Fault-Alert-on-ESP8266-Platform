@@ -1,88 +1,30 @@
-/*
- Basic ESP8266 MQTT example
-
- This sketch demonstrates the capabilities of the pubsub library in combination
- with the ESP8266 board/library.
-
- It connects to an MQTT server then:
-  - publishes "hello world" to the topic "outTopic" every two seconds
-  - subscribes to the topic "inTopic", printing out any messages
-    it receives. NB - it assumes the received payloads are strings not binary
-  - If the first character of the topic "inTopic" is an 1, switch ON the ESP Led,
-    else switch it off
-
- It will reconnect to the server if the connection is lost using a blocking
- reconnect function. See the 'mqtt_reconnect_nonblocking' example for how to
- achieve the same result without blocking the main loop.
-
- To install the ESP8266 board, (using Arduino 1.6.4+):
-  - Add the following 3rd party board manager under "File -> Preferences -> Additional Boards Manager URLs":
-       http://arduino.esp8266.com/stable/package_esp8266com_index.json
-  - Open the "Tools -> Board -> Board Manager" and click install for the ESP8266"
-  - Select your ESP8266 in "Tools -> Board"
-
-*/
-
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include "DHT.h"
-#define DHTPIN D1 
-#define DHTTYPE DHT11 
-DHT dht(DHTPIN, DHTTYPE);
-// Update these with values suitable for your network.
 
-const char* ssid = "";//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-const char* password = "";//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-const char* mqtt_server = "";//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#define ledpinGreen 1
+#define ledpinRed 2
+#define ledpinBlue 3
+
+
+const char* ssid = "RZIAS";
+const char* password = "RZAwifi123!";
+const char* mqtt_server = "193.233.67.51";
+
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 long lastMsg = 0;
-char msg_sh[50];
 char msg_t[50];
 char msg_h[50];
 char msg[50];
-char msg_d[50];
-char msg_time[50];
-char msg_lamp_off[50];
 int value = 0;
-int hum;
-int t;
-int soil_hum;
+String msgfromchar;  //////string для подачи из топика в json
 String topicstr;
-int trig=1;//button
-long millis_button=0;
-int topic_lamp;
-int topic_vent;
-int topic_pump;
-const int trigPin = D9;   
-const int echoPin = D8;  
-long duration;
-int distance;
-int xD0;//button
-
-
-int h_start=19;
-int h_end=5;
-char h_s[2];
-char h_e[2];
-int lamp_off=0;
-int till_lamp_off=0;
-String date;
-String time_s;
-int h,m,s;
-int loc_h, loc_m,loc_s;
-int def_h,def_m,def_s;
-int def_t=0;
-
-int rele_lamp;
-int rele_vent;
-int rele_pump;
-int m_lamp_off=0;
-
-long millis_lamp=0;
-long millis_pump=0;
-long millis_vent=0;
+char msg_pos[50];
+char bufferq1[256];
+char bufferq2[256];
+int signal = 0;
 
 
 void setup_wifi() {
@@ -108,178 +50,29 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
+
+
+
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  topicstr=topic; 
-    Serial.println(topicstr);
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+  msgfromchar = String((char*)payload);
+  signal = atoi((char*)payload);
+  Serial.print("Message arrived ");
+  Serial.println(signal);
+  if (atoi((char*)payload) == 1) {
+    digitalWrite(ledpinRed, HIGH);
+    digitalWrite(ledpinRed, LOW);
+    digitalWrite(ledpinBlue, LOW);
   }
-
-  if (topicstr=="h_start"){
-    h_start = atoi((char*)payload);
-    //if (length==2){
-      //h_start = payload[1];
-      //h_start= h_start <<8;
-      //h_start = h_start | payload[0];
-     // h_start = atoi((char*)payload);
-   // }
-   // if (length==1){
-      //h_s[0]=(char)payload[0];
-    //  h_start = atoi((char*)payload);
-   // }
-    Serial.print("h new ");
-    Serial.println(h_start);
-    //h_start=atoi(h_s);
+  if (atoi((char*)payload) == 2) {
+    digitalWrite(ledpinGreen, LOW);
+    digitalWrite(ledpinRed, LOW);
+    digitalWrite(ledpinBlue, LOW);
   }
-  if (topicstr=="h_end"){
-    //if (length==2){
-     // h_e[0]=(char)payload[0];
-      //h_e[1]=(char)payload[1];
-      h_end = atoi((char*)payload);
-    //}
-    //if (length==1){
-      //h_e[0]=(char)payload[0];
-    //}
-    //h_end=atoi(h_e);
-        Serial.print("h end new ");
-    Serial.println(h_end);
+  if (atoi((char*)payload) == 0) {
+    digitalWrite(ledpinGreen, LOW);
+    digitalWrite(ledpinRed, LOW);
+    digitalWrite(ledpinBlue, LOW);
   }
-  Serial.println();
-  if (topicstr=="lamp"){
-    millis_lamp=millis();
-    if ((char)payload[0] == '1') {
-     topic_lamp=1;
-     // digitalWrite(D4, LOW);      
-     } else {
-       // digitalWrite(D4, HIGH);  // Turn the LED off by making the voltage HIGH
-       topic_lamp=0;
-    //digitalWrite(D3, HIGH); 
-    }
-  }
-  if (topicstr=="vent"){
-      millis_vent=millis();
-    if ((char)payload[0] == '1') {
-     //digitalWrite(D3, LOW);
-     topic_vent=1;
-    } else {
-      //digitalWrite(D3, HIGH); 
-     topic_vent=0;
-    }
-  }
-  if (topicstr=="pump"){
-    if ((char)payload[0] == '1') {
-     topic_pump=1;
-     //digitalWrite(D2, LOW);
-    } else {
-     //digitalWrite(D2, HIGH); 
-      topic_pump=0;
-    }
-  }
-  if (topicstr=="lampoff"){
-    lamp_off=0;
-    lamp_off=atoi((char*)payload);
-    Serial.print("lamp_off ");
-    Serial.println(lamp_off);
-    Serial.print("atoi ");
-    Serial.print((char)payload[0]);
-    Serial.print((char)payload[1]);
-    Serial.print((char)payload[2]);
-    Serial.println((char)payload[3]);
-  }
-}
-
-void rele(){
-  Serial.println("rele");
-  Serial.print(h_start);
-  Serial.print(" ");
-  Serial.println(h_end);
-  if (h_start>h_end){
-    if (h>=h_start){
-      rele_lamp=0;
-    }else{
-      rele_lamp=1;
-    }
-    if (h<h_end){
-      rele_lamp=0;
-    }else{
-      rele_lamp=1;      
-    }
-  }
-  if (h_start<h_end){
-    if (h>=h_start&&h<h_end){
-      Serial.println("menshe");
-      rele_lamp=0;
-    }else{
-      rele_lamp=1;      
-    }
-  }
-
-  if (topic_lamp==1&&(millis()-millis_lamp<lamp_off*1000)){
-    rele_lamp=1;
-    till_lamp_off=lamp_off*1000-(millis()-millis_lamp);
-  }
-
-  if (rele_lamp==1) { 
-    digitalWrite(D4, LOW);      
-  } else {
-    digitalWrite(D4, HIGH);  // Turn the LED off by making the voltage HIGH 
-  } 
-  if (rele_vent == 1) {
-    digitalWrite(D3, LOW);
-  } else {
-    digitalWrite(D3, HIGH); 
-  }      
-  if (rele_pump == 1) {
-    digitalWrite(D2, LOW);
-  } else {
-    digitalWrite(D2, HIGH); 
-  }
-  Serial.print("rele_lamp ");
-  Serial.println(rele_lamp);
-  Serial.print("rele_vent ");
-  Serial.println(rele_vent);
-  Serial.print("rele_pump ");
-  Serial.println(rele_pump);
-}
-
-void buttonp(){
-  int miliss_button;
- xD0 = digitalRead (D10); 
- if (xD0==1)                  // Если xD0 равно "1" 
-   {   
-    if (trig==0){
-      trig=1;
-      miliss_button=millis();         
-    }
-  
-    if(millis()-miliss_button >= 3000) {
-         topic_pump=0; 
-    }
-    if (millis()-miliss_button < 3000) {
-         topic_vent=1; 
-    }
-   }
-  else
-   {
-    trig=0;
-    
-   } 
-}
-void distancep(){
-   //distance
-   digitalWrite(trigPin, LOW);
-   delayMicroseconds(2);
-   digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);  
-  distance= duration*0.034/2;
-  // Prints the distance on the Serial Monitor
-  Serial.print("Distance: ");
-  Serial.println(distance);
-   
 }
 void reconnect() {
   // Loop until we're reconnected
@@ -294,12 +87,7 @@ void reconnect() {
       // Once connected, publish an announcement...
       client.publish("outTopic", "hello world");
       // ... and resubscribe
-      client.subscribe("lamp");
-      client.subscribe("vent");
-      client.subscribe("pump");      
-      client.subscribe("h_start");
-      client.subscribe("h_end");
-      client.subscribe("lampoff");      
+      client.subscribe("inTopic");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -308,158 +96,29 @@ void reconnect() {
       delay(5000);
     }
   }
+  client.subscribe("command_arc/");
 }
-// =======================================================================
-// Берем время у GOOGLE
-// =======================================================================
-
-float utcOffset = 3; //поправка часового пояса
-long localEpoc = 0;
-long localMillisAtUpdate = 0;
-
-void getTime()
-{
-  WiFiClient client;
-  if (!client.connect("www.google.com", 80)) {
-    Serial.println("connection to google failed");
-    return;
-  }
-
-  client.print(String("GET / HTTP/1.1\r\n") +
-               String("Host: www.google.com\r\n") +
-               String("Connection: close\r\n\r\n"));
-  int repeatCounter = 0;
-  while (!client.available() && repeatCounter < 10) {
-    delay(500);
-    //Serial.println(".");
-    repeatCounter++;
-  }
-
-  String line;
-  client.setNoDelay(false);
-  while(client.connected() && client.available()) {
-    line = client.readStringUntil('\n');
-    line.toUpperCase();
-    if (line.startsWith("DATE: ")) {
-      date = "     "+line.substring(6, 22);
-      Serial.println(date);
-      h = line.substring(23, 25).toInt();
-      h = h;
-      m = line.substring(26, 28).toInt();
-      s = line.substring(29, 31).toInt();
-      localMillisAtUpdate = millis();
-      localEpoc = (h * 60 * 60 + m * 60 + s);
-          Serial.print(h);
-    Serial.print(":");
-    Serial.print(m);
-    Serial.print(":");
-    Serial.println(s);
-    }
-  }
-  client.stop();
-}
-
-// =======================================================================r
-void updateTime()
-{
-  long curEpoch = localEpoc + ((millis() - localMillisAtUpdate) / 1000);
-  long epoch = round(curEpoch + 3600 * utcOffset + 86400L) % 86400L;
-  h = ((epoch  % 86400L) / 3600) % 24;
-  m = (epoch % 3600) / 60;
-  
-  s = epoch % 60;
-      Serial.print(h);
-    Serial.print(":");
-    Serial.print(m);
-    Serial.print(":");
-    Serial.println(s);
-}
-// =======================================================================r
-
 
 void setup() {
-  long millis_button=0;
-  dht.begin();
-  pinMode(D4, OUTPUT);     // Initialize the D4 pin as an output
-  pinMode(D3, OUTPUT); 
-  pinMode(D2, OUTPUT);
-  pinMode(D0, INPUT); 
-  pinMode(D10,INPUT);//button
-  pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
-  pinMode(echoPin, INPUT); // Sets the echoPin as an Input
+  pinMode(ledpinGreen, OUTPUT);
+  pinMode(ledpinRed, OUTPUT);
+  pinMode(ledpinBlue, OUTPUT);
+  digitalWrite(ledpinGreen, LOW);
+  digitalWrite(ledpinRed, LOW);
+  digitalWrite(ledpinBlue, LOW);
   Serial.begin(9600);
-    Serial.println();
+  Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
+  reconnect();
   client.setCallback(callback);
 }
 
 void loop() {
-
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
-  hum = dht.readHumidity();
-  t = dht.readTemperature(); 
-  soil_hum = digitalRead (D0); 
- 
-  long now = millis();
-  if (now - lastMsg > 2000) {
-    lastMsg = now;
-    ++value;
-    snprintf (msg, 75, "hello world #%ld", value);
-    snprintf (msg_t, 75, "temp %ld", t);
-    snprintf (msg_h, 75, "hum %ld", hum);
-    snprintf (msg_sh, 75, "hum %ld", soil_hum);    
-    Serial.print("Publish message: ");
-    Serial.println(msg);
-    Serial.print("t=");
-    Serial.println(t);
-    Serial.print("hum=");
-    Serial.println(hum);
-    Serial.print("soil_hum=");
-    Serial.println(soil_hum);
-    client.publish("outTopic", msg);
-    client.publish("outTopic_t", msg_t);
-    client.publish("outTopic_h", msg_h);
-    client.publish("outTopic_sh", msg_sh);  
-    distancep();
-       snprintf (msg_d, 75, "dist %ld", distance);  
-       client.publish("dist",msg_d);
-    getTime();
-    updateTime();
-    if (def_t=0){
-      def_t=1;
-      def_h=h;
-      def_m=m;
-      def_s=s;
-    }
-    time_s=String(h)+":"+String(m)+":"+String(s);
-    char *cstr = new char[time_s.length() + 1];
-    strcpy(cstr, time_s.c_str());
-    // do stuff
-    snprintf (msg_time, 75, "time %s", cstr);
-    client.publish("time",msg_time);
-        delete [] cstr;
-    Serial.println(time_s);
-    Serial.print(h);
-    Serial.print(":");
-    Serial.print(m);
-    Serial.print(":");
-    Serial.println(s);
-       
-   rele();
-   Serial.println(till_lamp_off);
-   m_lamp_off=till_lamp_off/1000;
-   Serial.println(m_lamp_off);
-   snprintf (msg_lamp_off, 75, "%ld",m_lamp_off );
-   client.publish("till_lamp_off", msg_lamp_off); 
-   snprintf (msg_time, 75, "%ld",h_start );
-   client.publish("h_start_r", msg_time); 
-   snprintf (msg_time, 75, "%ld",h_end );
-   client.publish("h_end_r", msg_time); 
-  }
 }
