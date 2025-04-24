@@ -7,9 +7,9 @@
 #define ledpinBlue 3
 
 
-const char* ssid = "RZIAS";
-const char* password = "RZAwifi123!";
-const char* mqtt_server = "193.233.67.51";
+const char* ssid = "";
+const char* password = "";
+const char* mqtt_server = "";
 
 
 WiFiClient espClient;
